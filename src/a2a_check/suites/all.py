@@ -13,7 +13,7 @@ from ..util import resolve_card_url
 
 
 class FullSuite:
-    """Runs the end-to-end compliance suite for a given target."""
+    """Runs the end-to-end compliance suite for a givsen target."""
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
