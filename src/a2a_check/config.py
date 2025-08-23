@@ -6,6 +6,7 @@ from typing import Optional, Mapping
 @dataclass(frozen=True)
 class Settings:
     """Immutable configuration for network and protocol operations."""
+
     timeout_s: float = 8.0
     verify_tls: bool = True
     stream_timeout_s: float = 12.0

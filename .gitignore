@@ -1,1 +1,97 @@
-__pycache__
+# -----------------------------
+# Python byte-compiled / cache
+# -----------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Compiled extensions
+*.so
+*.pyd
+*.dll
+
+# -----------------------------
+# Build / packaging artifacts
+# -----------------------------
+build/
+dist/
+downloads/
+.eggs/
+*.egg-info/
+*.egg
+wheels/
+pip-wheel-metadata/
+.installed.cfg
+
+# -----------------------------
+# Virtual environments (uv/venv)
+# -----------------------------
+.venv/
+venv/
+ENV/
+env/
+.venv*/
+.python-version
+
+# If you do NOT want to commit the uv lockfile, uncomment the next line.
+# uv.lock
+
+# -----------------------------
+# Logs & runtime
+# -----------------------------
+*.log
+logs/
+
+# -----------------------------
+# Test / coverage tooling
+# -----------------------------
+.pytest_cache/
+.coverage
+.coverage.*
+.cache
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# -----------------------------
+# Linters / type checkers
+# -----------------------------
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+.pyre/
+.pyright/
+
+# -----------------------------
+# Notebooks
+# -----------------------------
+.ipynb_checkpoints/
+
+# -----------------------------
+# IDE / editor
+# -----------------------------
+.vscode/
+.idea/
+*.iml
+
+# -----------------------------
+# OS junk
+# -----------------------------
+.DS_Store
+Thumbs.db
+
+# -----------------------------
+# Local config / secrets
+# -----------------------------
+.env
+.env.*
+*.env
+*.secret
+secrets.*
+*.local
+**/config/local.*

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import List, Optional, Tuple, Dict, Any
+from typing import List, Optional, Any
 
 from ..config import Settings
 from ..http_client import HttpClient
@@ -26,12 +26,18 @@ class FullSuite:
 
     def _pick_url_for_transport(self, card: Any, transport: str) -> Optional[str]:
         # preferred?
-        pref = getattr(card, "preferred_transport", None) or getattr(card, "preferredTransport", None)
+        pref = getattr(card, "preferred_transport", None) or getattr(
+            card, "preferredTransport", None
+        )
         url = getattr(card, "url", None)
         if pref == transport and url:
             return url
         # additional interfaces
-        add = getattr(card, "additional_interfaces", None) or getattr(card, "additionalInterfaces", None) or []
+        add = (
+            getattr(card, "additional_interfaces", None)
+            or getattr(card, "additionalInterfaces", None)
+            or []
+        )
         for i in add:
             if (getattr(i, "transport", None) or i.get("transport")) == transport:
                 return getattr(i, "url", None) or i.get("url")
@@ -44,7 +50,9 @@ class FullSuite:
             card_service = CardService(http, self.settings)
 
             # Network + fetch raw
-            resolved_url, raw, net_results = card_service.fetch_raw(target, override_card_url)
+            resolved_url, raw, net_results = card_service.fetch_raw(
+                target, override_card_url
+            )
             sections.append(Section(title="Network", results=net_results))
 
             # Schema
@@ -64,20 +72,38 @@ class FullSuite:
                 client = JsonRpcClient(http, self.settings, jsonrpc_url)
                 sections.append(JsonRpcChecks(card, jsonrpc_url, client).run_section())
             else:
-                sections.append(Section(
-                    title="JSON-RPC",
-                    results=[CheckResult(rule="RPC-URL", ok=False, message="Agent declares no JSON-RPC interface", severity=Severity.WARN)]
-                ))
+                sections.append(
+                    Section(
+                        title="JSON-RPC",
+                        results=[
+                            CheckResult(
+                                rule="RPC-URL",
+                                ok=False,
+                                message="Agent declares no JSON-RPC interface",
+                                severity=Severity.WARN,
+                            )
+                        ],
+                    )
+                )
 
             # REST
             rest_url = self._pick_url_for_transport(card, "HTTP+JSON")
             if rest_url:
                 sections.append(RestChecks(http, self.settings, rest_url).run_section())
             else:
-                sections.append(Section(
-                    title="HTTP+JSON",
-                    results=[CheckResult(rule="REST-URL", ok=True, message="No HTTP+JSON interface declared (skip)", severity=Severity.INFO)]
-                ))
+                sections.append(
+                    Section(
+                        title="HTTP+JSON",
+                        results=[
+                            CheckResult(
+                                rule="REST-URL",
+                                ok=True,
+                                message="No HTTP+JSON interface declared (skip)",
+                                severity=Severity.INFO,
+                            )
+                        ],
+                    )
+                )
 
             return sections
         finally:

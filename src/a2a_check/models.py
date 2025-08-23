@@ -13,6 +13,7 @@ class Severity(str, Enum):
 @dataclass
 class CheckResult:
     """Atomic result of a single validation rule."""
+
     rule: str
     ok: bool
     message: str
@@ -23,6 +24,7 @@ class CheckResult:
 @dataclass
 class Section:
     """Collection of related check results."""
+
     title: str
     results: List[CheckResult] = field(default_factory=list)
 

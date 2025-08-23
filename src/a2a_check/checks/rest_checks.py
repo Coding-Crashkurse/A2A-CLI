@@ -5,7 +5,6 @@ from ..http_client import HttpClient
 from ..config import Settings
 from ..models import CheckResult, Section, Severity
 
-
 class RestChecks:
     """
     HTTP+JSON mapping checks.

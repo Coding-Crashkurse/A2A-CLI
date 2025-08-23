@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 import httpx
 from httpx_sse import connect_sse
 from .config import Settings

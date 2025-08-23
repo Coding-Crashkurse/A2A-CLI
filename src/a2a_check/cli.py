@@ -1,4 +1,3 @@
-# src/a2a_check/cli.py
 from __future__ import annotations
 import typer
 from rich.console import Console
@@ -11,10 +10,8 @@ from .checks.card_checks import CardChecks
 from .checks.jsonrpc_checks import JsonRpcChecks
 from .jsonrpc_client import JsonRpcClient
 from .suites.all import FullSuite
-from .models import Section
-
-# Static import of the dummy server (no try/except fallback)
-from .helloworld.__main__ import main as hello_main  # type: ignore
+from .models import Section, Severity
+from .helloworld.__main__ import main as hello_main
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 card_app = typer.Typer(add_completion=False, no_args_is_help=True)
@@ -23,7 +20,13 @@ net_app = typer.Typer(add_completion=False, no_args_is_help=True)
 suite_app = typer.Typer(add_completion=False, no_args_is_help=True)
 
 
-def _settings(timeout: float, insecure: bool, stream_timeout: float, well_known_path: str, auth_bearer: str | None):
+def _settings(
+    timeout: float,
+    insecure: bool,
+    stream_timeout: float,
+    well_known_path: str,
+    auth_bearer: str | None,
+):
     return Settings(
         timeout_s=timeout,
         verify_tls=not insecure,
@@ -33,31 +36,67 @@ def _settings(timeout: float, insecure: bool, stream_timeout: float, well_known_
     )
 
 
+def _count_levels(sections: list[Section]) -> tuple[int, int, int]:
+    ok = warn = err = 0
+    for sec in sections:
+        for r in sec.results:
+            if r.ok:
+                ok += 1
+            elif getattr(r, "severity", None) == Severity.WARN:
+                warn += 1
+            else:
+                err += 1
+    return ok, warn, err
+
+
+def _exit_code(reporter: Reporter, sections: list[Section], fail_on_warn: bool) -> int:
+    code = reporter.summary_exit_code(sections)
+    if fail_on_warn and code == 0:
+        _, warn, _ = _count_levels(sections)
+        if warn > 0:
+            return 2
+    return code
+
+
+def _finalize(console: Console, reporter: Reporter, sections: list[Section], fail_on_warn: bool):
+    code = _exit_code(reporter, sections, fail_on_warn)
+    reporter.summary(sections)
+    ok, warn, err = _count_levels(sections)
+    suffix = " (fail-on-warn)" if fail_on_warn else ""
+    console.print(f"[bold]Summary:[/bold] OK {ok} • WARN {warn} • ERROR {err} → exit {code}{suffix}")
+    raise typer.Exit(code=code)
+
+
 @app.callback()
 def main() -> None:
-    """A2A compliance checker CLI."""
+    pass
 
 
 @net_app.command("probe")
 def net_probe(
     target: str = typer.Argument(..., help="Base URL or AgentCard URL"),
-    well_known_path: str = typer.Option("/.well-known/agent-card.json", "--well-known-path"),
+    well_known_path: str = typer.Option(
+        "/.well-known/agent-card.json", "--well-known-path"
+    ),
     timeout: float = typer.Option(8.0, "--timeout"),
     insecure: bool = typer.Option(False, "--insecure"),
     auth_bearer: str | None = typer.Option(None, "--auth-bearer"),
     stream_timeout: float = typer.Option(12.0, "--stream-timeout"),
+    fail_on_warn: bool = typer.Option(False, "--fail-on-warn", help="Return exit code 2 if warnings are present (and no errors)."),
 ):
     console = Console()
     reporter = Reporter(console)
-    settings = _settings(timeout, insecure, stream_timeout, well_known_path, auth_bearer)
+    settings = _settings(
+        timeout, insecure, stream_timeout, well_known_path, auth_bearer
+    )
     http = HttpClient(settings)
     try:
         card_service = CardService(http, settings)
-        resolved_url, raw, net_results = card_service.fetch_raw(target, None)
+        _, _, net_results = card_service.fetch_raw(target, None)
         sections = [Section(title="Network", results=net_results)]
         for sec in sections:
             reporter.section(sec)
-        raise typer.Exit(code=reporter.summary_exit_code(sections))
+        _finalize(console, reporter, sections, fail_on_warn)
     finally:
         http.close()
 
@@ -66,15 +105,20 @@ def net_probe(
 def card_fetch(
     target: str = typer.Argument(..., help="Base URL or AgentCard URL"),
     card_url: str | None = typer.Option(None, "--card-url"),
-    well_known_path: str = typer.Option("/.well-known/agent-card.json", "--well-known-path"),
+    well_known_path: str = typer.Option(
+        "/.well-known/agent-card.json", "--well-known-path"
+    ),
     timeout: float = typer.Option(8.0, "--timeout"),
     insecure: bool = typer.Option(False, "--insecure"),
     auth_bearer: str | None = typer.Option(None, "--auth-bearer"),
     stream_timeout: float = typer.Option(12.0, "--stream-timeout"),
+    fail_on_warn: bool = typer.Option(False, "--fail-on-warn", help="Return exit code 2 if warnings are present (and no errors)."),
 ):
     console = Console()
     reporter = Reporter(console)
-    settings = _settings(timeout, insecure, stream_timeout, well_known_path, auth_bearer)
+    settings = _settings(
+        timeout, insecure, stream_timeout, well_known_path, auth_bearer
+    )
     http = HttpClient(settings)
     try:
         card_service = CardService(http, settings)
@@ -86,7 +130,7 @@ def card_fetch(
         sections.append(card_checks.run_section())
         for sec in sections:
             reporter.section(sec)
-        raise typer.Exit(code=reporter.summary_exit_code(sections))
+        _finalize(console, reporter, sections, fail_on_warn)
     finally:
         http.close()
 
@@ -95,13 +139,15 @@ def card_fetch(
 def card_validate(
     target: str = typer.Argument(..., help="Base URL or AgentCard URL"),
     card_url: str | None = typer.Option(None, "--card-url"),
-    well_known_path: str = typer.Option("/.well-known/agent-card.json", "--well-known-path"),
+    well_known_path: str = typer.Option(
+        "/.well-known/agent-card.json", "--well-known-path"
+    ),
     timeout: float = typer.Option(8.0, "--timeout"),
     insecure: bool = typer.Option(False, "--insecure"),
     auth_bearer: str | None = typer.Option(None, "--auth-bearer"),
     stream_timeout: float = typer.Option(12.0, "--stream-timeout"),
+    fail_on_warn: bool = typer.Option(False, "--fail-on-warn", help="Return exit code 2 if warnings are present (and no errors)."),
 ):
-    # Direct call (no .callback indirection)
     return card_fetch(
         target=target,
         card_url=card_url,
@@ -110,6 +156,7 @@ def card_validate(
         insecure=insecure,
         auth_bearer=auth_bearer,
         stream_timeout=stream_timeout,
+        fail_on_warn=fail_on_warn,
     )
 
 
@@ -120,34 +167,35 @@ def rpc_ping(
     insecure: bool = typer.Option(False, "--insecure"),
     auth_bearer: str | None = typer.Option(None, "--auth-bearer"),
     stream_timeout: float = typer.Option(12.0, "--stream-timeout"),
+    fail_on_warn: bool = typer.Option(False, "--fail-on-warn", help="Return exit code 2 if warnings are present (and no errors)."),
 ):
-    """
-    Ping a JSON-RPC URL (streaming intentionally disabled in this command).
-    """
     console = Console()
     reporter = Reporter(console)
-    settings = _settings(timeout, insecure, stream_timeout, "/.well-known/agent-card.json", auth_bearer)
+    settings = _settings(
+        timeout, insecure, stream_timeout, "/.well-known/agent-card.json", auth_bearer
+    )
     http = HttpClient(settings)
     try:
         client = JsonRpcClient(http, settings, jsonrpc_url)
         from a2a.types import AgentCard
-        # Disable streaming in ping to avoid SSE requirements here
-        fake = AgentCard.model_validate({
-            "protocolVersion": "0.3.0",
-            "name": "temp",
-            "description": "temp",
-            "url": jsonrpc_url,
-            "preferredTransport": "JSONRPC",
-            "version": "1.0.0",
-            "capabilities": {"streaming": False},
-            "defaultInputModes": ["text/plain"],
-            "defaultOutputModes": ["application/json"],
-            "skills": [],
-        })
+        fake = AgentCard.model_validate(
+            {
+                "protocolVersion": "0.3.0",
+                "name": "temp",
+                "description": "temp",
+                "url": jsonrpc_url,
+                "preferredTransport": "JSONRPC",
+                "version": "1.0.0",
+                "capabilities": {"streaming": False},
+                "defaultInputModes": ["text/plain"],
+                "defaultOutputModes": ["application/json"],
+                "skills": [],
+            }
+        )
         checks = JsonRpcChecks(fake, jsonrpc_url, client)
         section = checks.run_section()
         reporter.section(section)
-        raise typer.Exit(code=reporter.summary_exit_code([section]))
+        _finalize(console, reporter, [section], fail_on_warn)
     finally:
         http.close()
 
@@ -156,18 +204,20 @@ def rpc_ping(
 def rpc_ping_from_card(
     target: str = typer.Argument(..., help="Base URL or AgentCard URL"),
     card_url: str | None = typer.Option(None, "--card-url"),
-    well_known_path: str = typer.Option("/.well-known/agent-card.json", "--well-known-path"),
+    well_known_path: str = typer.Option(
+        "/.well-known/agent-card.json", "--well-known-path"
+    ),
     timeout: float = typer.Option(8.0, "--timeout"),
     insecure: bool = typer.Option(False, "--insecure"),
     auth_bearer: str | None = typer.Option(None, "--auth-bearer"),
     stream_timeout: float = typer.Option(12.0, "--stream-timeout"),
+    fail_on_warn: bool = typer.Option(False, "--fail-on-warn", help="Return exit code 2 if warnings are present (and no errors)."),
 ):
-    """
-    Fetch the AgentCard from the target and ping the declared JSON-RPC URL.
-    """
     console = Console()
     reporter = Reporter(console)
-    settings = _settings(timeout, insecure, stream_timeout, well_known_path, auth_bearer)
+    settings = _settings(
+        timeout, insecure, stream_timeout, well_known_path, auth_bearer
+    )
     http = HttpClient(settings)
     try:
         card_service = CardService(http, settings)
@@ -178,9 +228,7 @@ def rpc_ping_from_card(
         if not card:
             for sec in sections:
                 reporter.section(sec)
-            raise typer.Exit(code=reporter.summary_exit_code(sections))
-
-        # Determine JSON-RPC URL (same logic as in FullSuite)
+            _finalize(console, reporter, sections, fail_on_warn)
         jsonrpc_url: str | None = None
         pref = card.preferred_transport or "JSONRPC"
         if pref == "JSONRPC":
@@ -190,9 +238,8 @@ def rpc_ping_from_card(
                 if i.transport == "JSONRPC":
                     jsonrpc_url = i.url
                     break
-
         if not jsonrpc_url:
-            from .models import CheckResult, Severity
+            from .models import CheckResult
             sections.append(Section(
                 title="JSON-RPC",
                 results=[CheckResult(rule="RPC-URL", ok=False, message="Agent does not declare a JSON-RPC interface", severity=Severity.ERROR)]
@@ -200,27 +247,27 @@ def rpc_ping_from_card(
             for sec in sections:
                 reporter.section(sec)
             raise typer.Exit(code=1)
-
         client = JsonRpcClient(http, settings, jsonrpc_url)
         from a2a.types import AgentCard as _AC
-        # Disable streaming in ping to avoid SSE requirements here
-        fake = _AC.model_validate({
-            "protocolVersion": "0.3.0",
-            "name": "temp",
-            "description": "temp",
-            "url": jsonrpc_url,
-            "preferredTransport": "JSONRPC",
-            "version": "1.0.0",
-            "capabilities": {"streaming": False},
-            "defaultInputModes": ["text/plain"],
-            "defaultOutputModes": ["application/json"],
-            "skills": [],
-        })
+        fake = _AC.model_validate(
+            {
+                "protocolVersion": "0.3.0",
+                "name": "temp",
+                "description": "temp",
+                "url": jsonrpc_url,
+                "preferredTransport": "JSONRPC",
+                "version": "1.0.0",
+                "capabilities": {"streaming": False},
+                "defaultInputModes": ["text/plain"],
+                "defaultOutputModes": ["application/json"],
+                "skills": [],
+            }
+        )
         checks = JsonRpcChecks(fake, jsonrpc_url, client)
         sections.append(checks.run_section())
         for sec in sections:
             reporter.section(sec)
-        raise typer.Exit(code=reporter.summary_exit_code(sections))
+        _finalize(console, reporter, sections, fail_on_warn)
     finally:
         http.close()
 
@@ -233,27 +280,46 @@ def rpc_stream(
     insecure: bool = typer.Option(False, "--insecure"),
     auth_bearer: str | None = typer.Option(None, "--auth-bearer"),
     stream_timeout: float = typer.Option(12.0, "--stream-timeout"),
+    fail_on_warn: bool = typer.Option(False, "--fail-on-warn", help="Return exit code 2 if warnings are present (and no errors)."),
 ):
     console = Console()
     reporter = Reporter(console)
-    settings = _settings(timeout, insecure, stream_timeout, "/.well-known/agent-card.json", auth_bearer)
+    settings = _settings(
+        timeout, insecure, stream_timeout, "/.well-known/agent-card.json", auth_bearer
+    )
     http = HttpClient(settings)
     try:
         client = JsonRpcClient(http, settings, jsonrpc_url)
         try:
-            payload, events = client.stream_text(text)
+            _, events = client.stream_text(text)
             ok = len(events) > 0
-            from .models import CheckResult, Section, Severity
-            section = Section(title="JSON-RPC Stream", results=[
-                CheckResult(rule="RPC-STREAM", ok=ok, message="received SSE events" if ok else "no SSE events", severity=Severity.ERROR if not ok else Severity.INFO)
-            ])
+            from .models import CheckResult, Section as _Section
+            section = _Section(
+                title="JSON-RPC Stream",
+                results=[
+                    CheckResult(
+                        rule="RPC-STREAM",
+                        ok=ok,
+                        message="received SSE events" if ok else "no SSE events",
+                        severity=Severity.ERROR if not ok else Severity.INFO,
+                    )
+                ],
+            )
         except Exception as e:
-            from .models import CheckResult, Section, Severity
-            section = Section(title="JSON-RPC Stream", results=[
-                CheckResult(rule="RPC-STREAM", ok=False, message=f"stream error {e}", severity=Severity.ERROR)
-            ])
+            from .models import CheckResult, Section as _Section
+            section = _Section(
+                title="JSON-RPC Stream",
+                results=[
+                    CheckResult(
+                        rule="RPC-STREAM",
+                        ok=False,
+                        message=f"stream error {e}",
+                        severity=Severity.ERROR,
+                    )
+                ],
+            )
         reporter.section(section)
-        raise typer.Exit(code=reporter.summary_exit_code([section]))
+        _finalize(console, reporter, [section], fail_on_warn)
     finally:
         http.close()
 
@@ -262,33 +328,51 @@ def rpc_stream(
 def suite_all(
     target: str = typer.Argument(..., help="Base URL or AgentCard URL"),
     card_url: str | None = typer.Option(None, "--card-url"),
-    well_known_path: str = typer.Option("/.well-known/agent-card.json", "--well-known-path"),
+    well_known_path: str = typer.Option(
+        "/.well-known/agent-card.json", "--well-known-path"
+    ),
     timeout: float = typer.Option(8.0, "--timeout"),
     insecure: bool = typer.Option(False, "--insecure"),
     auth_bearer: str | None = typer.Option(None, "--auth-bearer"),
     stream_timeout: float = typer.Option(12.0, "--stream-timeout"),
+    fail_on_warn: bool = typer.Option(False, "--fail-on-warn", help="Return exit code 2 if warnings are present (and no errors)."),
 ):
     console = Console()
     reporter = Reporter(console)
-    settings = _settings(timeout, insecure, stream_timeout, well_known_path, auth_bearer)
+    settings = _settings(
+        timeout, insecure, stream_timeout, well_known_path, auth_bearer
+    )
     suite = FullSuite(settings)
     sections = suite.run(target, card_url)
     for sec in sections:
         reporter.section(sec)
-    raise typer.Exit(code=reporter.summary_exit_code(sections))
+    _finalize(console, reporter, sections, fail_on_warn)
 
 
-# --- fixed dummy launcher with --wrong flag ---
 @app.command("start_dummy")
 def start_dummy(
-    host: str = typer.Option("127.0.0.1", "--host", help="Bind address for the dummy A2A server"),
+    host: str = typer.Option(
+        "127.0.0.1", "--host", help="Bind address for the dummy A2A server"
+    ),
     port: int = typer.Option(9999, "--port", help="Port for the dummy A2A server"),
-    wrong: bool = typer.Option(False, "--wrong", help="Serve intentionally broken Card/RPC for demo failures"),
+    mode: str = typer.Option(
+        None,
+        "--mode",
+        help='Dummy mode: "ok", "errors", or "mixed". If omitted, falls back to --wrong behavior.',
+    ),
+    wrong: bool = typer.Option(
+        False,
+        "--wrong",
+        help="Deprecated. Maps to --mode errors when set.",
+    ),
 ):
-    """
-    Start the built-in Hello-World A2A server (JSON-RPC + SSE).
-    """
-    hello_main(host=host, port=port, wrong=wrong)
+    if mode is not None:
+        m = mode.strip().lower()
+        if m not in ("ok", "errors", "mixed"):
+            raise typer.BadParameter('Invalid --mode. Use "ok", "errors", or "mixed".')
+    else:
+        m = "errors" if wrong else "ok"
+    hello_main(host=host, port=port, mode=m)
 
 
 app.add_typer(net_app, name="net")

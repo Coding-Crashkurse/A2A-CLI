@@ -3,12 +3,10 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich.text import Text
-from .models import CheckResult, Section, Severity
+from .models import Section, Severity
 
 
 class Reporter:
-    """Renders sections and check results using rich."""
-
     def __init__(self, console: Console) -> None:
         self.console = console
 
@@ -44,4 +42,10 @@ class Reporter:
         table.add_column("WARN")
         table.add_column("ERROR")
         table.add_row(str(ok), str(warn), str(err))
-        self.console.print(Panel.fit(table, title=Text("Summary", style="bold green")))
+        if err > 0:
+            style = "bold red"
+        elif warn > 0:
+            style = "bold yellow"
+        else:
+            style = "bold green"
+        self.console.print(Panel.fit(table, title=Text("Summary", style=style)))

@@ -15,7 +15,9 @@ def build_origin(u: str) -> str:
     return f"{scheme}://{netloc}"
 
 
-def resolve_card_url(target: str, override_card_url: str | None, well_known_path: str) -> str:
+def resolve_card_url(
+    target: str, override_card_url: str | None, well_known_path: str
+) -> str:
     """Resolve the AgentCard URL from a base target or an explicit override."""
     if override_card_url:
         return ensure_scheme(override_card_url)
