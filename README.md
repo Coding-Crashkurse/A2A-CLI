@@ -11,7 +11,7 @@ It probes the Agent Card, verifies key spec requirements, and (if available) exe
 > **About rule IDs**
 > The rule IDs you see in the output (e.g., `CARD-001`, `RPC-010`, `REST-URL`) are **internal labels of this CLI** to make results stable and greppable.  
 > They **do not come from the A2A specification** itself — each rule maps to one or more normative requirements in the A2A spec.  
-> Hinweis: **: kommt nicht von mir** (Regel‑IDs stammen aus diesem CLI, nicht aus der A2A‑Spezifikation).
+> Note: **: not from me** (Rule IDs originate from this CLI, not from the A2A specification).
 
 ---
 
