@@ -26,3 +26,22 @@ class Reporter:
     def summary_exit_code(self, sections: list[Section]) -> int:
         has_error = any(s.has_failures() for s in sections)
         return 1 if has_error else 0
+
+    def summary(self, sections: list[Section]) -> None:
+        ok = 0
+        warn = 0
+        err = 0
+        for s in sections:
+            for r in s.results:
+                if r.ok:
+                    ok += 1
+                elif r.severity == Severity.WARN:
+                    warn += 1
+                else:
+                    err += 1
+        table = Table(show_header=True, header_style="bold")
+        table.add_column("OK")
+        table.add_column("WARN")
+        table.add_column("ERROR")
+        table.add_row(str(ok), str(warn), str(err))
+        self.console.print(Panel.fit(table, title=Text("Summary", style="bold green")))
