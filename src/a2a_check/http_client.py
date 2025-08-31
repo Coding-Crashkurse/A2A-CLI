@@ -5,6 +5,7 @@ from httpx_sse import connect_sse
 from .config import Settings
 
 
+
 class HttpClient:
     """Synchronous HTTP client wrapper for JSON and SSE."""
 

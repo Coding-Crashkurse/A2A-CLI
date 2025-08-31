@@ -303,6 +303,72 @@ Use the embedded dummy to quickly see various outcomes:
 
 ---
 
+## Web UI (optional)
+
+A lightweight developer UI is included and served by a small FastAPI app with a **same‑origin reverse proxy**.  
+It lets you explore tasks and stream events without CORS issues.
+
+### Start the UI
+
+```bash
+uv run a2a-check ui
+# Opens http://127.0.0.1:5173 by default
+```
+
+**Options** (subset):
+- `--target URL` – base URL or card URL to pre‑resolve at startup
+- `--rest-base URL` – set REST base directly (skips card resolution)
+- `--card-url URL` – explicit card URL if not at the well‑known path
+- `--auth-bearer TOKEN` – send `Authorization: Bearer TOKEN` to the agent
+- `--insecure` – skip TLS verification
+- `--host/--port` – UI bind address / port
+- `--open/--no-open` – auto‑open the browser tab
+
+### Configure an agent
+
+Inside the UI:
+1. Enter **Agent Card URL** (e.g., `http://localhost:8003/.well-known/agent-card.json`) and optional **Authorization**.
+2. Click **Add** to resolve a **REST base** (`HTTP+JSON`) and activate it.
+3. Navigate to **Dashboard** to list tasks, stream updates, and inspect artifacts.
+
+> The UI can also be preconfigured via CLI: `a2a-check ui --target <base-or-card>` or `--rest-base <url>`.
+
+### How the proxy works
+
+Browser → `http://127.0.0.1:5173/api/...` → UI server → agent REST base.
+
+- The SPA calls **only** `/api/*` (same origin). No direct calls to the agent → **no CORS**.
+- The UI server rewrites and forwards requests to the configured REST base.
+- SSE is detected by the `Accept: text/event-stream` header or by the `:stream`/`:subscribe` suffix and is **streamed through**.
+- If `--auth-bearer` (or the UI's auth field) is set, the proxy injects the `Authorization` header server‑side.
+- Debug header: responses include `x-a2a-proxy-upstream` with the upstream URL.
+
+### Control endpoints (used by the SPA)
+
+- `GET /control/config` – show current proxy config
+- `POST /control/config` – set `restBase` or a `cardUrl`/`target` to resolve
+- `GET /control/card?url=...` – fetch card server‑side (avoids CORS)
+- `GET /control/resolve?cardUrl=...` – resolve REST base from a card
+
+### Troubleshooting the UI
+
+- **CORS error fetching the card**  
+  Enter the card URL in the UI form (or use `--target`) so the server fetches it via `/control/card`. Do **not** fetch the agent card directly from the browser.
+
+- **Requests still go to the agent, not `/api`**  
+  Ensure the client code uses the proxy base `"/api"` (`PROXY_BASE`) and the shared `defaultConn`. The network tab should show `/api/v1/...`. The server log prints `PROXY →` lines for forwarded requests.
+
+- **SSE returns 422 (Unprocessable Entity)**  
+  Your REST server likely expects `MessageSendParams` (`{"message": {...}}`) while you posted a JSON‑RPC envelope. The UI already sends the correct REST payload; verify upstream logs for the exact validation error.
+
+- **No stream events**  
+  Check that the REST server implements `POST /v1/message:stream` as SSE with `text/event-stream`. Corporate proxies can buffer or close long‑lived HTTP/1.1 streams.
+
+- **401/403 from upstream**  
+  Provide a bearer token via `--auth-bearer` or in the UI auth field. The proxy will add the header to upstream calls.
+
+---
+
 ## Contributing
 
 - Keep rule IDs stable and documented above.
